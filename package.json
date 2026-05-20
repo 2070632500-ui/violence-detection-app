@@ -1,0 +1,26 @@
+{
+  "name": "violence-detection-app",
+  "version": "1.0.0",
+  "description": "YOLOv5暴力检测系统手机App",
+  "main": "index.html",
+  "scripts": {
+    "build": "cordova build",
+    "build-android": "cordova build android",
+    "build-ios": "cordova build ios",
+    "run-android": "cordova run android",
+    "run-ios": "cordova run ios"
+  },
+  "keywords": ["violence", "detection", "yolov5", "cordova"],
+  "author": "YOLOv5暴力检测系统",
+  "license": "MIT",
+  "dependencies": {
+    "cordova-android": "^12.0.0",
+    "cordova-ios": "^7.0.0",
+    "cordova-plugin-camera": "^7.0.0",
+    "cordova-plugin-file": "^7.0.0",
+    "cordova-plugin-media-capture": "^4.0.0"
+  },
+  "devDependencies": {
+    "cordova": "^12.0.0"
+  }
+}
