@@ -1,0 +1,73 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Setup Java JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 34
+        build-tools: 34.0.0
+    
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v3
+      with:
+        gradle-version: '8.7'
+    
+    - name: Install Cordova
+      run: npm install -g cordova@12
+    
+    - name: Prepare project
+      run: |
+        cd violence-detect-app
+        npm install
+    
+    - name: Copy web files
+      run: |
+        cp web_ui.html violence-detect-app/www/
+        cp manifest.json violence-detect-app/www/
+        if [ -f "web_server.py" ]; then
+          cp web_server.py violence-detect-app/www/
+        fi
+    
+    - name: Build Android APK
+      run: |
+        cd violence-detect-app
+        cordova platform add android || true
+        cordova build android --release
+    
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-apk
+        path: |
+          violence-detect-app/platforms/android/app/build/outputs/apk/release/*.apk
+          violence-detect-app/platforms/android/app/build/outputs/apk/debug/*.apk
+    
+    - name: List APK files
+      run: |
+        ls -la violence-detect-app/platforms/android/app/build/outputs/apk/ || true
+        find violence-detect-app -name "*.apk" -type f

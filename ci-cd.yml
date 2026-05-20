@@ -1,0 +1,137 @@
+name: YOLOv5暴力检测系统 CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  test:
+    name: 运行测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 设置Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8 black
+
+      - name: 代码格式化检查
+        run: |
+          black --check .
+
+      - name: 代码质量检查
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: 运行测试
+        run: |
+          pytest test_*.py -v
+
+  build:
+    name: 构建Docker镜像
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 设置Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: 登录到Docker Hub
+        uses: docker/login-action@v2
+        if: github.event_name != 'pull_request'
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 构建并推送
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            violence-detection:latest
+            violence-detection:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy_aws:
+    name: 部署到AWS EC2
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+      - name: 部署到AWS EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ${{ secrets.AWS_EC2_USERNAME }}
+          key: ${{ secrets.AWS_EC2_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_EC2_PORT }}
+          script: |
+            cd ~/yolov5_violence_detect
+            git pull origin main
+            docker-compose down
+            docker-compose pull
+            docker-compose up -d
+
+  deploy_aliyun:
+    name: 部署到阿里云ECS
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+      - name: 部署到阿里云ECS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.ALIYUN_ECS_HOST }}
+          username: ${{ secrets.ALIYUN_ECS_USERNAME }}
+          key: ${{ secrets.ALIYUN_ECS_PRIVATE_KEY }}
+          port: ${{ secrets.ALIYUN_ECS_PORT }}
+          script: |
+            cd ~/yolov5_violence_detect
+            git pull origin main
+            docker-compose down
+            docker-compose pull
+            docker-compose up -d
+
+  deploy_k8s:
+    name: 部署到Kubernetes
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 配置kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      - name: 部署到Kubernetes
+        run: |
+          kubectl apply -f kubernetes/deployment.yaml
+          kubectl rollout status deployment/violence-detection-api -n violence-detection
+          kubectl rollout status deployment/violence-detection-web -n violence-detection
